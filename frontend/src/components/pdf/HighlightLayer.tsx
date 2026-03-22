@@ -54,21 +54,18 @@ export default function HighlightLayer({
   if (pageAiHighlights.length === 0 && pageUserHighlights.length === 0)
     return null;
 
-  // react-pdf renders at CSS 96 DPI, PyMuPDF bbox at PDF 72 DPI
-  const DPI_RATIO = 96 / 72;
-
   return (
     <div className="absolute inset-0 pointer-events-none z-10">
-      {/* AI auto-highlights */}
+      {/* AI auto-highlights — bbox는 PDF 72 DPI 좌표, react-pdf도 동일 좌표계 */}
       {pageAiHighlights.map((h, i) => (
         <div
           key={`ai-${h.category}-${i}`}
           className="absolute pointer-events-auto cursor-pointer group"
           style={{
-            left: h.bbox.x * scale * DPI_RATIO,
-            top: h.bbox.y * scale * DPI_RATIO,
-            width: h.bbox.w * scale * DPI_RATIO,
-            height: h.bbox.h * scale * DPI_RATIO,
+            left: h.bbox.x * scale,
+            top: h.bbox.y * scale,
+            width: h.bbox.w * scale,
+            height: h.bbox.h * scale,
             backgroundColor: AI_COLORS[h.category] || AI_COLORS.novelty,
             borderLeft: `3px solid ${AI_BORDER_COLORS[h.category] || AI_BORDER_COLORS.novelty}`,
           }}
