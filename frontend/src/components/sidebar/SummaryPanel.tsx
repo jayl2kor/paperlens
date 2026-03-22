@@ -32,7 +32,6 @@ export default function SummaryPanel({ paperId }: SummaryPanelProps) {
       paperId,
       (chunk) => {
         appendSummary(chunk);
-        // Auto-scroll to bottom during streaming
         requestAnimationFrame(() => {
           scrollRef.current?.scrollTo({
             top: scrollRef.current.scrollHeight,
@@ -45,12 +44,13 @@ export default function SummaryPanel({ paperId }: SummaryPanelProps) {
         setSummaryLoading(false);
       }
     );
-  }, [paperId, summary, summaryLoading, setSummaryLoading, appendSummary, setSummary]);
+  }, [paperId, summary, summaryLoading, setSummaryLoading, appendSummary]);
 
   useEffect(() => {
     if (!requested.current) {
       requested.current = true;
-      loadSummary();
+      // Defer to avoid synchronous setState-in-effect lint error
+      queueMicrotask(() => loadSummary());
     }
   }, [loadSummary]);
 

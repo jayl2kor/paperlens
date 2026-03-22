@@ -1,4 +1,3 @@
-import shutil
 import uuid
 from pathlib import Path
 
@@ -20,13 +19,23 @@ async def upload_paper(file: UploadFile, db: Session = Depends(get_db)):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
-    # Save file with unique name
     file_ext = Path(file.filename).suffix
     unique_name = f"{uuid.uuid4()}{file_ext}"
     file_path = Path(settings.upload_dir) / unique_name
 
+    # Stream file to disk with size limit
+    max_bytes = settings.max_upload_size_mb * 1024 * 1024
+    total = 0
     with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        while chunk := await file.read(8192):
+            total += len(chunk)
+            if total > max_bytes:
+                file_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"파일이 너무 큽니다 (최대 {settings.max_upload_size_mb}MB)",
+                )
+            buffer.write(chunk)
 
     # Extract PDF data
     try:
@@ -70,7 +79,10 @@ def get_paper_file(paper_id: int, db: Session = Depends(get_db)):
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
 
-    file_path = Path(paper.file_path)
+    file_path = Path(paper.file_path).resolve()
+    upload_dir = Path(settings.upload_dir).resolve()
+    if not str(file_path).startswith(str(upload_dir)):
+        raise HTTPException(status_code=403, detail="Invalid file path")
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="PDF file not found on disk")
 

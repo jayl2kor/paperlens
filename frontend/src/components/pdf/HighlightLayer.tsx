@@ -36,6 +36,9 @@ export default function HighlightLayer({
   const pageHighlights = highlights.filter((h) => h.page === pageNumber);
   if (pageHighlights.length === 0) return null;
 
+  // react-pdf renders at CSS 96 DPI, PyMuPDF bbox at PDF 72 DPI
+  const DPI_RATIO = 96 / 72;
+
   return (
     <div className="absolute inset-0 pointer-events-none z-10">
       {pageHighlights.map((h, i) => (
@@ -43,10 +46,10 @@ export default function HighlightLayer({
           key={`${h.category}-${i}`}
           className="absolute pointer-events-auto cursor-pointer group"
           style={{
-            left: h.bbox.x * scale,
-            top: h.bbox.y * scale,
-            width: h.bbox.w * scale,
-            height: h.bbox.h * scale,
+            left: h.bbox.x * scale * DPI_RATIO,
+            top: h.bbox.y * scale * DPI_RATIO,
+            width: h.bbox.w * scale * DPI_RATIO,
+            height: h.bbox.h * scale * DPI_RATIO,
             backgroundColor: COLORS[h.category] || COLORS.novelty,
             borderLeft: `3px solid ${BORDER_COLORS[h.category] || BORDER_COLORS.novelty}`,
           }}

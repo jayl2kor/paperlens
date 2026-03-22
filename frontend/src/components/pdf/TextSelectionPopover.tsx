@@ -143,7 +143,10 @@ export default function TextSelectionPopover({
         });
       },
       () => setExplanationLoading(false),
-      () => setExplanationLoading(false)
+      (msg) => {
+        setExplanationLoading(false);
+        setExplanation(`오류: ${msg}`);
+      }
     );
   };
 

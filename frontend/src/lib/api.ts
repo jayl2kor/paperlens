@@ -70,7 +70,8 @@ async function readSSE(
   response: Response,
   onChunk: (text: string) => void,
   onDone: () => void,
-  onError: (msg: string) => void
+  onError: (msg: string) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   if (!response.body) {
     onDone();
@@ -83,6 +84,7 @@ async function readSSE(
   let doneReceived = false;
 
   while (true) {
+    if (signal?.aborted) break;
     const { done, value } = await reader.read();
     if (done) break;
 
@@ -116,10 +118,12 @@ export async function streamSummary(
   paperId: number,
   onChunk: (text: string) => void,
   onDone: () => void,
-  onError: (msg: string) => void
+  onError: (msg: string) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   const response = await fetch(`/api/ai/summary/${paperId}`, {
     method: "POST",
+    signal,
   });
 
   if (!response.ok || !response.body) {
@@ -127,7 +131,7 @@ export async function streamSummary(
     return;
   }
 
-  await readSSE(response, onChunk, onDone, onError);
+  await readSSE(response, onChunk, onDone, onError, signal);
 }
 
 export async function getAutoHighlights(
@@ -148,7 +152,8 @@ export async function streamExplain(
   contentType: string,
   onChunk: (text: string) => void,
   onDone: () => void,
-  onError: (msg: string) => void
+  onError: (msg: string) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   const response = await fetch(`/api/ai/explain/${paperId}`, {
     method: "POST",
@@ -159,6 +164,7 @@ export async function streamExplain(
       content_type: contentType,
       page: 1,
     }),
+    signal,
   });
 
   if (!response.ok || !response.body) {
@@ -166,7 +172,7 @@ export async function streamExplain(
     return;
   }
 
-  await readSSE(response, onChunk, onDone, onError);
+  await readSSE(response, onChunk, onDone, onError, signal);
 }
 
 // ── Translate API ───────────────────────────────────────────────────────────
@@ -178,7 +184,8 @@ export async function streamTranslate(
   targetLanguage: string,
   onChunk: (text: string) => void,
   onDone: () => void,
-  onError: (msg: string) => void
+  onError: (msg: string) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   const response = await fetch(`/api/ai/translate/${paperId}`, {
     method: "POST",
@@ -188,6 +195,7 @@ export async function streamTranslate(
       page,
       target_language: targetLanguage,
     }),
+    signal,
   });
 
   if (!response.ok || !response.body) {
@@ -195,7 +203,7 @@ export async function streamTranslate(
     return;
   }
 
-  await readSSE(response, onChunk, onDone, onError);
+  await readSSE(response, onChunk, onDone, onError, signal);
 }
 
 // ── Chat API ────────────────────────────────────────────────────────────────
@@ -224,12 +232,14 @@ export async function streamChat(
   mode: ChatMode,
   onChunk: (text: string) => void,
   onDone: () => void,
-  onError: (msg: string) => void
+  onError: (msg: string) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   const response = await fetch(`/api/ai/chat/${paperId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question, mode }),
+    signal,
   });
 
   if (!response.ok || !response.body) {
@@ -237,7 +247,7 @@ export async function streamChat(
     return;
   }
 
-  await readSSE(response, onChunk, onDone, onError);
+  await readSSE(response, onChunk, onDone, onError, signal);
 }
 
 export async function getChatHistory(

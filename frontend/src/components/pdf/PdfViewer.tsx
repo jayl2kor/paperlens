@@ -19,9 +19,10 @@ interface PdfViewerProps {
 }
 
 export default function PdfViewer({ fileUrl, paperId, structuredContent }: PdfViewerProps) {
-  const { currentPage, totalPages, scale, setCurrentPage, setTotalPages } =
+  const { totalPages, scale, setCurrentPage, setTotalPages } =
     usePaperStore();
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
 
   const onDocumentLoadSuccess = useCallback(
     ({ numPages }: { numPages: number }) => {
@@ -32,28 +33,33 @@ export default function PdfViewer({ fileUrl, paperId, structuredContent }: PdfVi
   );
 
   const handleScroll = useCallback(() => {
-    const container = containerRef.current;
-    if (!container || totalPages === 0) return;
+    // Throttle with requestAnimationFrame to avoid O(n) DOM queries per scroll event
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const container = containerRef.current;
+      if (!container) return;
 
-    const pages = container.querySelectorAll("[data-page-number]");
-    let closestPage = 1;
-    let closestDistance = Infinity;
+      const pages = container.querySelectorAll("[data-page-number]");
+      let closestPage = 1;
+      let closestDistance = Infinity;
+      const containerTop = container.scrollTop + container.clientHeight / 3;
 
-    const containerTop = container.scrollTop + container.clientHeight / 3;
+      pages.forEach((page) => {
+        const el = page as HTMLElement;
+        const distance = Math.abs(el.offsetTop - containerTop);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestPage = parseInt(el.dataset.pageNumber || "1");
+        }
+      });
 
-    pages.forEach((page) => {
-      const el = page as HTMLElement;
-      const distance = Math.abs(el.offsetTop - containerTop);
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestPage = parseInt(el.dataset.pageNumber || "1");
+      const cur = usePaperStore.getState().currentPage;
+      if (closestPage !== cur) {
+        setCurrentPage(closestPage);
       }
     });
-
-    if (closestPage !== currentPage) {
-      setCurrentPage(closestPage);
-    }
-  }, [currentPage, totalPages, setCurrentPage]);
+  }, [setCurrentPage]);
 
   return (
     <div

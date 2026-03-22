@@ -1,11 +1,14 @@
+import hashlib
 import json
 from collections.abc import AsyncGenerator
+from contextlib import contextmanager
 from typing import Literal
 
 import anthropic
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database import SessionLocal
 from app.models.ai_cache import AiCache
 from app.models.chat_message import ChatMessage
 from app.services.context_manager import select_context
@@ -153,11 +156,26 @@ MAX_TEXT_CHARS = 600_000  # ~150K tokens
 
 _NO_KEY_MSG = "ANTHROPIC_API_KEY가 설정되지 않았습니다."
 
+_client: anthropic.AsyncAnthropic | None = None
+
 
 def _get_client() -> anthropic.AsyncAnthropic:
+    global _client
     if not settings.anthropic_api_key:
         raise ValueError(_NO_KEY_MSG)
-    return anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    if _client is None:
+        _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    return _client
+
+
+@contextmanager
+def _db_session():
+    """Create a standalone DB session for use inside async generators."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 def _truncate(text: str) -> str:
@@ -258,7 +276,9 @@ async def stream_summary(
                 full_response += chunk
                 yield _sse({"type": "chunk", "content": chunk})
 
-        _set_cache(db, paper_id, "summary", full_response)
+        # Use a fresh session — the original may be closed by FastAPI
+        with _db_session() as sdb:
+            _set_cache(sdb, paper_id, "summary", full_response)
         yield _sse({"type": "done"})
     except anthropic.APIError as e:
         yield _sse({"type": "error", "content": f"AI API 오류: {e.message}"})
@@ -305,7 +325,8 @@ async def stream_translate(
     db: Session,
 ) -> AsyncGenerator[str, None]:
     """Stream a translation of the given text via SSE. Caches per paper+page."""
-    cache_key = f"translate_p{page}_{target_language}"
+    text_hash = hashlib.md5(text.encode()).hexdigest()[:8]
+    cache_key = f"translate_p{page}_{target_language}_{text_hash}"
     cached = _get_cache(db, paper_id, cache_key)
     if cached:
         yield _sse({"type": "cached", "content": cached})
@@ -334,7 +355,8 @@ async def stream_translate(
                 full_response += chunk
                 yield _sse({"type": "chunk", "content": chunk})
 
-        _set_cache(db, paper_id, cache_key, full_response)
+        with _db_session() as sdb:
+            _set_cache(sdb, paper_id, cache_key, full_response)
         yield _sse({"type": "done"})
     except anthropic.APIError as e:
         yield _sse({"type": "error", "content": f"AI API 오류: {e.message}"})
@@ -397,14 +419,13 @@ async def stream_chat(
     )
     prior.reverse()
 
-    # Save user message
-    db.add(ChatMessage(paper_id=paper_id, role="user", content=question, mode=mode))
-    db.commit()
+    # Save user message with a fresh session
+    with _db_session() as sdb:
+        sdb.add(ChatMessage(paper_id=paper_id, role="user", content=question, mode=mode))
+        sdb.commit()
 
-    # Build context from paper
     context = select_context(question, full_text, structured_content, mode)
 
-    # Build messages: prior history + current question with paper context
     messages: list[dict] = [{"role": m.role, "content": m.content} for m in prior]
     messages.append({"role": "user", "content": CHAT_USER.format(context=context, question=question)})
 
@@ -423,8 +444,9 @@ async def stream_chat(
                 full_response += chunk
                 yield _sse({"type": "chunk", "content": chunk})
 
-        db.add(ChatMessage(paper_id=paper_id, role="assistant", content=full_response, mode=mode))
-        db.commit()
+        with _db_session() as sdb:
+            sdb.add(ChatMessage(paper_id=paper_id, role="assistant", content=full_response, mode=mode))
+            sdb.commit()
         yield _sse({"type": "done"})
     except anthropic.APIError as e:
         yield _sse({"type": "error", "content": f"AI API 오류: {e.message}"})
