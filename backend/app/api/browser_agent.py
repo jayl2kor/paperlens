@@ -6,11 +6,15 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.services.browser_agent import search_and_download_paper, verify_frontend
+from app.services.browser_agent import (
+    TestResult,
+    search_and_download_paper,
+    verify_frontend,
+)
 
 router = APIRouter(prefix="/api/agent", tags=["browser-agent"])
 
-# ── Request / Response Models ─────────────────────────────────────────────
+AGENT_TIMEOUT = 300  # 5분
 
 
 class PaperSearchRequest(BaseModel):
@@ -47,22 +51,26 @@ class VerifyResponse(BaseModel):
     errors: list[str]
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────
-
-
 @router.post("/search", response_model=PaperSearchResponse)
 async def search_papers(body: PaperSearchRequest):
     """브라우저 에이전트로 논문을 검색하고 PDF를 다운로드한다."""
     try:
-        results = await search_and_download_paper(
-            body.query,
-            max_papers=body.max_papers,
-            source=body.source,
-            headless=True,
+        results = await asyncio.wait_for(
+            search_and_download_paper(
+                body.query,
+                max_papers=body.max_papers,
+                source=body.source,
+                headless=True,
+            ),
+            timeout=AGENT_TIMEOUT,
         )
         return PaperSearchResponse(
             results=[PaperSearchResult(**r) for r in results]
         )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="에이전트 실행 시간 초과")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"에이전트 실행 실패: {e}")
 
@@ -71,16 +79,23 @@ async def search_papers(body: PaperSearchRequest):
 async def verify_fe(body: VerifyRequest):
     """브라우저 에이전트로 프론트엔드 E2E 검증을 수행한다."""
     try:
-        result = await verify_frontend(
-            body.scenario,
-            base_url=body.base_url,
-            headless=True,
+        result: TestResult = await asyncio.wait_for(
+            verify_frontend(
+                body.scenario,
+                base_url=body.base_url,
+                headless=True,
+            ),
+            timeout=AGENT_TIMEOUT,
         )
         return VerifyResponse(
-            passed=result["passed"],
-            summary=result.get("summary", ""),
-            steps=[TestStep(**s) for s in result.get("steps", [])],
-            errors=result.get("errors", []),
+            passed=result.passed,
+            summary=result.summary,
+            steps=[TestStep(**s) for s in result.steps],
+            errors=result.errors,
         )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="검증 실행 시간 초과")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"검증 실행 실패: {e}")
