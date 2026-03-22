@@ -99,61 +99,96 @@ export default function HighlightLayer({
 
 type Rect = { left: number; top: number; width: number; height: number };
 
+/**
+ * offsetLeft/offsetTop 기반으로 페이지 내 상대 좌표를 계산.
+ * getBoundingClientRect()는 스크롤 위치에 따라 값이 변하므로 사용하지 않음.
+ */
+function getOffsetRelativeTo(
+  el: HTMLElement,
+  ancestor: HTMLElement
+): { left: number; top: number } {
+  let left = 0;
+  let top = 0;
+  let current: HTMLElement | null = el;
+  while (current && current !== ancestor) {
+    left += current.offsetLeft;
+    top += current.offsetTop;
+    current = current.offsetParent as HTMLElement | null;
+  }
+  return { left, top };
+}
+
 function findHighlightRects(pageNumber: number, text: string): Rect[] {
-  const pageEl = document.querySelector(
-    `[data-page-number="${pageNumber}"] .textLayer`
+  const wrapper = document.querySelector(
+    `[data-page-number="${pageNumber}"] .relative`
   );
-  if (!pageEl) return [];
+  if (!wrapper) return [];
 
-  // Cache page rect once (avoids repeated layout queries)
-  const pageContainer = pageEl
-    .closest("[data-page-number]")
-    ?.querySelector(".react-pdf__Page");
-  if (!pageContainer) return [];
-  const pageRect = pageContainer.getBoundingClientRect();
+  const textLayer = wrapper.querySelector(".textLayer");
+  if (!textLayer) return [];
 
-  const spans = pageEl.querySelectorAll("span");
+  const spans = textLayer.querySelectorAll("span");
   const searchText = text.toLowerCase();
+  const ancestor = wrapper as HTMLElement;
+
+  // Strategy 1: full match in a single span
+  for (const span of spans) {
+    const spanText = span.textContent || "";
+    if (!spanText.trim()) continue;
+    if (spanText.toLowerCase().includes(searchText)) {
+      const el = span as HTMLElement;
+      const pos = getOffsetRelativeTo(el, ancestor);
+      return [
+        {
+          left: pos.left,
+          top: pos.top,
+          width: el.offsetWidth,
+          height: el.offsetHeight,
+        },
+      ];
+    }
+  }
+
+  // Strategy 2: match across multiple spans
   let accumulated = "";
-  let startSpan: Element | null = null;
+  let startSpan: HTMLElement | null = null;
 
   for (const span of spans) {
     const spanText = span.textContent || "";
     if (!spanText.trim()) continue;
+    const el = span as HTMLElement;
 
     if (!startSpan) {
-      if (spanText.toLowerCase().includes(searchText)) {
-        const rect = span.getBoundingClientRect();
-        return [
-          {
-            left: rect.left - pageRect.left,
-            top: rect.top - pageRect.top,
-            width: rect.width,
-            height: rect.height,
-          },
-        ];
-      }
       if (searchText.startsWith(spanText.toLowerCase().trim())) {
-        startSpan = span;
+        startSpan = el;
         accumulated = spanText.toLowerCase().trim();
       }
     } else {
       accumulated += spanText.toLowerCase().trim();
       if (accumulated.includes(searchText)) {
-        const startRect = startSpan.getBoundingClientRect();
-        const endRect = span.getBoundingClientRect();
+        const startPos = getOffsetRelativeTo(startSpan, ancestor);
+        const endPos = getOffsetRelativeTo(el, ancestor);
         return [
           {
-            left: Math.min(startRect.left, endRect.left) - pageRect.left,
-            top: Math.min(startRect.top, endRect.top) - pageRect.top,
+            left: Math.min(startPos.left, endPos.left),
+            top: Math.min(startPos.top, endPos.top),
             width:
-              Math.max(startRect.right, endRect.right) -
-              Math.min(startRect.left, endRect.left),
+              Math.max(
+                startPos.left + startSpan.offsetWidth,
+                endPos.left + el.offsetWidth
+              ) - Math.min(startPos.left, endPos.left),
             height:
-              Math.max(startRect.bottom, endRect.bottom) -
-              Math.min(startRect.top, endRect.top),
+              Math.max(
+                startPos.top + startSpan.offsetHeight,
+                endPos.top + el.offsetHeight
+              ) - Math.min(startPos.top, endPos.top),
           },
         ];
+      }
+      // Reset if accumulated doesn't match prefix anymore
+      if (!searchText.startsWith(accumulated)) {
+        startSpan = null;
+        accumulated = "";
       }
     }
   }
