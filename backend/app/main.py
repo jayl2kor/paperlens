@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, highlights, papers
+from app.api import ai, browser_agent, highlights, papers
 from app.database import Base, engine
 
 # Import all models so Base.metadata knows about them
@@ -26,6 +26,7 @@ app.add_middleware(
 app.include_router(papers.router)
 app.include_router(highlights.router)
 app.include_router(ai.router)
+app.include_router(browser_agent.router)
 
 
 @app.get("/api/health")

@@ -9,3 +9,4 @@ pydantic-settings>=2.7.0
 rapidfuzz>=3.10.0
 python-dotenv>=1.0.1
 aiofiles>=24.1.0
+browser-use>=0.3.0
