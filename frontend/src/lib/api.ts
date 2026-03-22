@@ -83,30 +83,37 @@ async function readSSE(
   let buffer = "";
   let doneReceived = false;
 
-  while (true) {
-    if (signal?.aborted) break;
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      if (signal?.aborted) break;
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      try {
-        const data = JSON.parse(line.slice(6));
-        if (data.type === "chunk" || data.type === "cached")
-          onChunk(data.content);
-        else if (data.type === "error") onError(data.content);
-        else if (data.type === "done") {
-          doneReceived = true;
-          onDone();
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.type === "chunk" || data.type === "cached")
+            onChunk(data.content);
+          else if (data.type === "error") onError(data.content);
+          else if (data.type === "done") {
+            doneReceived = true;
+            onDone();
+          }
+        } catch {
+          // skip malformed lines
         }
-      } catch {
-        // skip malformed lines
       }
     }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") return;
+    throw err;
+  } finally {
+    reader.cancel().catch(() => {});
   }
 
   if (!doneReceived) onDone();
@@ -266,6 +273,65 @@ export async function getCitations(
     `/ai/citations/${paperId}`
   );
   return data;
+}
+
+// ── User Highlight Types & API ──────────────────────────────────────────────
+
+export interface UserHighlightItem {
+  id: number;
+  paper_id: number;
+  text: string;
+  color: string;
+  page: number;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserHighlightCreate {
+  text: string;
+  color?: string;
+  page: number;
+  note?: string | null;
+}
+
+export async function listHighlights(
+  paperId: number
+): Promise<UserHighlightItem[]> {
+  const { data } = await api.get<UserHighlightItem[]>(
+    `/papers/${paperId}/highlights`
+  );
+  return data;
+}
+
+export async function createHighlight(
+  paperId: number,
+  body: UserHighlightCreate
+): Promise<UserHighlightItem> {
+  const { data } = await api.post<UserHighlightItem>(
+    `/papers/${paperId}/highlights`,
+    body
+  );
+  return data;
+}
+
+export async function updateHighlight(
+  paperId: number,
+  highlightId: number,
+  body: { color?: string; note?: string | null }
+): Promise<UserHighlightItem> {
+  const { data } = await api.patch<UserHighlightItem>(
+    `/papers/${paperId}/highlights/${highlightId}`,
+    body
+  );
+  return data;
+}
+
+export async function deleteHighlight(
+  paperId: number,
+  highlightId: number
+): Promise<void> {
+  await api.delete(`/papers/${paperId}/highlights/${highlightId}`);
 }
 
 // ── Formula API ─────────────────────────────────────────────────────────────

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { usePaperStore } from "@/stores/paperStore";
-import { streamExplain } from "@/lib/api";
+import { streamExplain, createHighlight } from "@/lib/api";
+import { HIGHLIGHT_COLORS } from "@/lib/highlightColors";
 
 interface TextSelectionPopoverProps {
   paperId: number;
@@ -25,11 +26,15 @@ export default function TextSelectionPopover({
     clearExplanation,
     setActiveTab,
     setSidebarOpen,
+    addUserHighlight,
+    userHighlightColor,
+    setUserHighlightColor,
   } = usePaperStore();
 
   const [showActions, setShowActions] = useState(false);
   const [popoverPos, setPopoverPos] = useState({ x: 0, y: 0 });
   const [showExplanation, setShowExplanation] = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const explanationRef = useRef<HTMLDivElement>(null);
 
@@ -157,6 +162,26 @@ export default function TextSelectionPopover({
     setShowActions(false);
   };
 
+  const handleHighlight = async (color: string) => {
+    if (!selection) return;
+
+    try {
+      const highlight = await createHighlight(paperId, {
+        text: selection.text,
+        color,
+        page: selection.page,
+      });
+      addUserHighlight(highlight);
+      setUserHighlightColor(color);
+    } catch (err) {
+      console.error("Failed to create highlight:", err);
+    }
+
+    setShowActions(false);
+    setShowColorPicker(false);
+    window.getSelection()?.removeAllRanges();
+  };
+
   if (!showActions || !selection) return null;
 
   return (
@@ -170,7 +195,7 @@ export default function TextSelectionPopover({
       }}
     >
       {/* Action buttons */}
-      {!showExplanation && (
+      {!showExplanation && !showColorPicker && (
         <div className="flex items-center gap-1 bg-foreground text-background rounded-lg shadow-xl px-1.5 py-1">
           <button
             onClick={handleExplain}
@@ -184,6 +209,44 @@ export default function TextSelectionPopover({
             className="px-2.5 py-1 text-xs font-medium rounded hover:bg-background/20 transition-colors"
           >
             번역
+          </button>
+          <div className="w-px h-4 bg-background/20" />
+          <button
+            onClick={() => setShowColorPicker(true)}
+            className="px-2.5 py-1 text-xs font-medium rounded hover:bg-background/20 transition-colors"
+          >
+            하이라이트
+          </button>
+        </div>
+      )}
+
+      {/* Color picker */}
+      {showColorPicker && !showExplanation && (
+        <div
+          className="flex items-center gap-1 bg-foreground text-background rounded-lg shadow-xl px-2 py-1.5"
+          role="radiogroup"
+          aria-label="하이라이트 색상 선택"
+        >
+          {HIGHLIGHT_COLORS.map((c) => (
+            <button
+              key={c.name}
+              onClick={() => handleHighlight(c.name)}
+              className={`w-7 h-7 rounded-full ${c.dotClass} border-2 transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-background ${
+                userHighlightColor === c.name
+                  ? "border-background scale-105"
+                  : "border-transparent"
+              }`}
+              role="radio"
+              aria-checked={userHighlightColor === c.name}
+              aria-label={c.label}
+            />
+          ))}
+          <button
+            onClick={() => setShowColorPicker(false)}
+            className="ml-1 text-background/50 hover:text-background text-sm p-1"
+            aria-label="색상 선택 닫기"
+          >
+            &times;
           </button>
         </div>
       )}

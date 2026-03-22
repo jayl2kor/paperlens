@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { HighlightItem, ChatMessage, CitationItem, ChatMode } from "@/lib/api";
+import type { HighlightItem, ChatMessage, CitationItem, ChatMode, UserHighlightItem } from "@/lib/api";
 
 export type SidebarTab = "summary" | "translate" | "chat" | "notes";
 
@@ -50,6 +50,11 @@ interface PaperStore {
   citations: CitationItem[];
   citationsLoading: boolean;
 
+  // User Highlights
+  userHighlights: UserHighlightItem[];
+  userHighlightsLoading: boolean;
+  userHighlightColor: string; // current color for new highlights
+
   // Actions — Viewer
   setCurrentPage: (page: number) => void;
   setTotalPages: (total: number) => void;
@@ -95,6 +100,14 @@ interface PaperStore {
   // Actions — Citations
   setCitations: (citations: CitationItem[]) => void;
   setCitationsLoading: (loading: boolean) => void;
+
+  // Actions — User Highlights
+  setUserHighlights: (highlights: UserHighlightItem[]) => void;
+  addUserHighlight: (highlight: UserHighlightItem) => void;
+  updateUserHighlight: (id: number, updates: Partial<UserHighlightItem>) => void;
+  removeUserHighlight: (id: number) => void;
+  setUserHighlightsLoading: (loading: boolean) => void;
+  setUserHighlightColor: (color: string) => void;
 }
 
 export const usePaperStore = create<PaperStore>((set) => ({
@@ -127,6 +140,10 @@ export const usePaperStore = create<PaperStore>((set) => ({
 
   citations: [],
   citationsLoading: false,
+
+  userHighlights: [],
+  userHighlightsLoading: false,
+  userHighlightColor: "yellow",
 
   // Viewer
   setCurrentPage: (page) => set({ currentPage: page }),
@@ -169,6 +186,8 @@ export const usePaperStore = create<PaperStore>((set) => ({
       chatStreaming: "",
       citations: [],
       citationsLoading: false,
+      userHighlights: [],
+      userHighlightsLoading: false,
     }),
 
   // Selection & Explanation
@@ -222,4 +241,22 @@ export const usePaperStore = create<PaperStore>((set) => ({
   // Citations
   setCitations: (citations) => set({ citations }),
   setCitationsLoading: (loading) => set({ citationsLoading: loading }),
+
+  // User Highlights
+  setUserHighlights: (highlights) => set({ userHighlights: highlights }),
+  addUserHighlight: (highlight) =>
+    set((state) => ({ userHighlights: [...state.userHighlights, highlight] })),
+  updateUserHighlight: (id, updates) =>
+    set((state) => ({
+      userHighlights: state.userHighlights.map((h) =>
+        h.id === id ? { ...h, ...updates } : h
+      ),
+    })),
+  removeUserHighlight: (id) =>
+    set((state) => ({
+      userHighlights: state.userHighlights.filter((h) => h.id !== id),
+    })),
+  setUserHighlightsLoading: (loading) =>
+    set({ userHighlightsLoading: loading }),
+  setUserHighlightColor: (color) => set({ userHighlightColor: color }),
 }));
