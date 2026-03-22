@@ -90,3 +90,34 @@ class CitationItem(BaseModel):
 
 class CitationsResponse(BaseModel):
     citations: list[CitationItem]
+
+
+# ── User Highlight Schemas ─────────────────────────────────────────────────
+
+
+HighlightColor = Literal["yellow", "green", "blue", "pink", "purple"]
+
+
+class UserHighlightCreate(BaseModel):
+    text: str
+    color: HighlightColor = "yellow"
+    page: int
+    note: str | None = None
+
+
+class UserHighlightUpdate(BaseModel):
+    color: HighlightColor | None = None
+    note: str | None = None
+
+
+class UserHighlightResponse(BaseModel):
+    id: int
+    paper_id: int
+    text: str
+    color: str
+    page: int
+    note: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}

@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import ai, papers
+from app.api import ai, highlights, papers
 from app.database import Base, engine
 
 # Import all models so Base.metadata knows about them
 from app.models import ai_cache as _ai_cache_models  # noqa: F401
 from app.models import chat_message as _chat_message_models  # noqa: F401
+from app.models import highlight as _highlight_models  # noqa: F401
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -23,6 +24,7 @@ app.add_middleware(
 )
 
 app.include_router(papers.router)
+app.include_router(highlights.router)
 app.include_router(ai.router)
 
 
