@@ -81,7 +81,7 @@ def get_paper_file(paper_id: int, db: Session = Depends(get_db)):
 
     file_path = Path(paper.file_path).resolve()
     upload_dir = Path(settings.upload_dir).resolve()
-    if not str(file_path).startswith(str(upload_dir)):
+    if not file_path.is_relative_to(upload_dir):
         raise HTTPException(status_code=403, detail="Invalid file path")
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="PDF file not found on disk")

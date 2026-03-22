@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from contextlib import contextmanager
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -25,6 +26,16 @@ class Base(DeclarativeBase):
 
 
 def get_db() -> Generator[Session, None, None]:
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@contextmanager
+def db_session():
+    """Standalone DB session for use outside FastAPI dependency injection (e.g. async generators)."""
     db = SessionLocal()
     try:
         yield db

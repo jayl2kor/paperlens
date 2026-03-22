@@ -3,7 +3,7 @@ import base64
 import fitz  # PyMuPDF
 
 from app.config import settings
-from app.services.ai_service import _get_client
+from app.services.ai_service import get_client
 
 FORMULA_SYSTEM = (
     "You are a LaTeX extraction assistant. "
@@ -46,7 +46,7 @@ async def extract_formula_latex(
 
     img_b64 = base64.b64encode(img_bytes).decode("utf-8")
 
-    client = _get_client()
+    client = get_client()
     response = await client.messages.create(
         model=settings.claude_model,
         max_tokens=1000,

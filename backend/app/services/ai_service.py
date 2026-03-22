@@ -1,14 +1,13 @@
 import hashlib
 import json
 from collections.abc import AsyncGenerator
-from contextlib import contextmanager
 from typing import Literal
 
 import anthropic
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import SessionLocal
+from app.database import db_session
 from app.models.ai_cache import AiCache
 from app.models.chat_message import ChatMessage
 from app.services.context_manager import select_context
@@ -159,23 +158,14 @@ _NO_KEY_MSG = "ANTHROPIC_API_KEY가 설정되지 않았습니다."
 _client: anthropic.AsyncAnthropic | None = None
 
 
-def _get_client() -> anthropic.AsyncAnthropic:
+def get_client() -> anthropic.AsyncAnthropic:
+    """Return a shared AsyncAnthropic client instance."""
     global _client
     if not settings.anthropic_api_key:
         raise ValueError(_NO_KEY_MSG)
     if _client is None:
         _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
     return _client
-
-
-@contextmanager
-def _db_session():
-    """Create a standalone DB session for use inside async generators."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def _truncate(text: str) -> str:
@@ -226,7 +216,7 @@ async def _cached_json_call(
     if cached:
         return json.loads(cached)
 
-    client = _get_client()
+    client = get_client()
     response = await client.messages.create(
         model=settings.claude_model,
         max_tokens=4000,
@@ -256,7 +246,7 @@ async def stream_summary(
         return
 
     try:
-        client = _get_client()
+        client = get_client()
     except ValueError as e:
         yield _sse({"type": "error", "content": str(e)})
         return
@@ -277,7 +267,7 @@ async def stream_summary(
                 yield _sse({"type": "chunk", "content": chunk})
 
         # Use a fresh session — the original may be closed by FastAPI
-        with _db_session() as sdb:
+        with db_session() as sdb:
             _set_cache(sdb, paper_id, "summary", full_response)
         yield _sse({"type": "done"})
     except anthropic.APIError as e:
@@ -291,7 +281,7 @@ async def stream_explain(
 ) -> AsyncGenerator[str, None]:
     """Stream an explanation of the selected text via SSE."""
     try:
-        client = _get_client()
+        client = get_client()
     except ValueError as e:
         yield _sse({"type": "error", "content": str(e)})
         return
@@ -334,7 +324,7 @@ async def stream_translate(
         return
 
     try:
-        client = _get_client()
+        client = get_client()
     except ValueError as e:
         yield _sse({"type": "error", "content": str(e)})
         return
@@ -355,7 +345,7 @@ async def stream_translate(
                 full_response += chunk
                 yield _sse({"type": "chunk", "content": chunk})
 
-        with _db_session() as sdb:
+        with db_session() as sdb:
             _set_cache(sdb, paper_id, cache_key, full_response)
         yield _sse({"type": "done"})
     except anthropic.APIError as e:
@@ -373,7 +363,7 @@ async def get_auto_highlights(
     if cached:
         return json.loads(cached)
 
-    client = _get_client()
+    client = get_client()
     text = _truncate(full_text)
 
     response = await client.messages.create(
@@ -404,7 +394,7 @@ async def stream_chat(
 ) -> AsyncGenerator[str, None]:
     """Stream an AI chat response about the paper via SSE. Persists messages."""
     try:
-        client = _get_client()
+        client = get_client()
     except ValueError as e:
         yield _sse({"type": "error", "content": str(e)})
         return
@@ -419,10 +409,9 @@ async def stream_chat(
     )
     prior.reverse()
 
-    # Save user message with a fresh session
-    with _db_session() as sdb:
-        sdb.add(ChatMessage(paper_id=paper_id, role="user", content=question, mode=mode))
-        sdb.commit()
+    # db is still alive here (before first yield), safe to use directly
+    db.add(ChatMessage(paper_id=paper_id, role="user", content=question, mode=mode))
+    db.commit()
 
     context = select_context(question, full_text, structured_content, mode)
 
@@ -444,7 +433,7 @@ async def stream_chat(
                 full_response += chunk
                 yield _sse({"type": "chunk", "content": chunk})
 
-        with _db_session() as sdb:
+        with db_session() as sdb:
             sdb.add(ChatMessage(paper_id=paper_id, role="assistant", content=full_response, mode=mode))
             sdb.commit()
         yield _sse({"type": "done"})
