@@ -101,6 +101,26 @@ def _get_llm():
     return _llm_instance
 
 
+def _find_chrome_path() -> str | None:
+    """Playwright가 설치한 Chrome 또는 시스템 Chrome 경로를 탐색."""
+    candidates = [
+        # Playwright cache (macOS)
+        *sorted(Path.home().glob(
+            "Library/Caches/ms-playwright/chromium-*/chrome-mac-arm64/"
+            "Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+        ), reverse=True),
+        # System Chrome (macOS)
+        Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+        # Linux
+        Path("/usr/bin/google-chrome"),
+        Path("/usr/bin/chromium"),
+    ]
+    for p in candidates:
+        if p.exists():
+            return str(p)
+    return None
+
+
 async def _run_agent(
     task: str,
     tools,
@@ -111,6 +131,10 @@ async def _run_agent(
 ) -> None:
     """공통 에이전트 실행 헬퍼. 브라우저 종료를 보장."""
     Agent, Browser, *_ = _lazy_imports()
+
+    chrome_path = _find_chrome_path()
+    if chrome_path:
+        browser_kwargs.setdefault("executable_path", chrome_path)
 
     browser = Browser(headless=headless, **browser_kwargs)
     try:
