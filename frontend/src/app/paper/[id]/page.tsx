@@ -11,6 +11,7 @@ import {
 import PdfViewer from "@/components/pdf/PdfViewer";
 import Toolbar from "@/components/pdf/Toolbar";
 import Sidebar from "@/components/sidebar/Sidebar";
+import SettingsDrawer from "@/components/SettingsDrawer";
 import { usePaperStore } from "@/stores/paperStore";
 
 export default function PaperPage({
@@ -21,6 +22,7 @@ export default function PaperPage({
   const { id } = use(params);
   const [paper, setPaper] = useState<PaperDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const {
     setHighlights,
     setHighlightsLoading,
@@ -117,11 +119,12 @@ export default function PaperPage({
 
   return (
     <div className="h-full flex flex-col">
-      <Toolbar title={paper.title} />
+      <Toolbar title={paper.title} onSettingsClick={() => setSettingsOpen(true)} />
       <div className="flex flex-1 overflow-hidden">
         <PdfViewer fileUrl={getPaperFileUrl(paper.id)} paperId={paper.id} structuredContent={paper.structured_content as never} />
         <Sidebar paperId={paper.id} />
       </div>
+      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

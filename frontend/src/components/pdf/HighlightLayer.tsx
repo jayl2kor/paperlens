@@ -124,15 +124,16 @@ function findHighlightRects(pageNumber: number, text: string): Rect[] {
   const textLayer = wrapper.querySelector(".textLayer");
   if (!textLayer) return [];
 
-  const spans = textLayer.querySelectorAll("span");
-  const searchText = text.toLowerCase();
+  const spans = Array.from(textLayer.querySelectorAll("span")).filter(
+    (s) => (s.textContent || "").trim().length > 0
+  );
+  const searchText = text.toLowerCase().replace(/\s+/g, " ").trim();
   const ancestor = wrapper as HTMLElement;
 
   // Strategy 1: full match in a single span
   for (const span of spans) {
-    const spanText = span.textContent || "";
-    if (!spanText.trim()) continue;
-    if (spanText.toLowerCase().includes(searchText)) {
+    const spanText = (span.textContent || "").toLowerCase();
+    if (spanText.includes(searchText)) {
       const el = span as HTMLElement;
       const pos = getOffsetRelativeTo(el, ancestor);
       return [
@@ -146,51 +147,69 @@ function findHighlightRects(pageNumber: number, text: string): Rect[] {
     }
   }
 
-  // Strategy 2: match across multiple spans
-  let accumulated = "";
-  let startSpan: HTMLElement | null = null;
+  // Strategy 2: normalize all text, find match, map back to spans.
+  // PDF spans may split "Table 1" into ["Table", "1"] — normalize spaces to match.
+  const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, "");
+  const normalizedSearch = normalize(searchText);
 
+  // Build a mapping: for each span, track its start position in the normalized full text
+  const spanMeta: { el: HTMLElement; start: number; end: number }[] = [];
+  let pos = 0;
   for (const span of spans) {
-    const spanText = span.textContent || "";
-    if (!spanText.trim()) continue;
-    const el = span as HTMLElement;
-
-    if (!startSpan) {
-      if (searchText.startsWith(spanText.toLowerCase().trim())) {
-        startSpan = el;
-        accumulated = spanText.toLowerCase().trim();
-      }
-    } else {
-      accumulated += spanText.toLowerCase().trim();
-      if (accumulated.includes(searchText)) {
-        const startPos = getOffsetRelativeTo(startSpan, ancestor);
-        const endPos = getOffsetRelativeTo(el, ancestor);
-        return [
-          {
-            left: Math.min(startPos.left, endPos.left),
-            top: Math.min(startPos.top, endPos.top),
-            width:
-              Math.max(
-                startPos.left + startSpan.offsetWidth,
-                endPos.left + el.offsetWidth
-              ) - Math.min(startPos.left, endPos.left),
-            height:
-              Math.max(
-                startPos.top + startSpan.offsetHeight,
-                endPos.top + el.offsetHeight
-              ) - Math.min(startPos.top, endPos.top),
-          },
-        ];
-      }
-      // Reset if accumulated doesn't match prefix anymore
-      if (!searchText.startsWith(accumulated)) {
-        startSpan = null;
-        accumulated = "";
-      }
-    }
+    const raw = span.textContent || "";
+    const norm = normalize(raw);
+    spanMeta.push({ el: span as HTMLElement, start: pos, end: pos + norm.length });
+    pos += norm.length;
   }
 
-  return [];
+  const fullNormalized = spanMeta.map((_, i) => normalize(spans[i].textContent || "")).join("");
+  const matchIdx = fullNormalized.indexOf(normalizedSearch);
+  if (matchIdx === -1) return [];
+
+  const matchEnd = matchIdx + normalizedSearch.length;
+  const matchedSpans: HTMLElement[] = spanMeta
+    .filter((m) => m.end > matchIdx && m.start < matchEnd)
+    .map((m) => m.el);
+
+  if (matchedSpans.length === 0) return [];
+
+  // Group matched spans by line (similar y-position, within 3px tolerance)
+  const lineGroups: HTMLElement[][] = [];
+  for (const el of matchedSpans) {
+    const pos = getOffsetRelativeTo(el, ancestor);
+    const lastGroup = lineGroups[lineGroups.length - 1];
+    if (lastGroup) {
+      const lastPos = getOffsetRelativeTo(lastGroup[0], ancestor);
+      if (Math.abs(pos.top - lastPos.top) < 3) {
+        lastGroup.push(el);
+        continue;
+      }
+    }
+    lineGroups.push([el]);
+  }
+
+  // Merge each line group into one rect
+  return lineGroups.map((group) => {
+    let minLeft = Infinity;
+    let minTop = Infinity;
+    let maxRight = 0;
+    let maxBottom = 0;
+
+    for (const el of group) {
+      const pos = getOffsetRelativeTo(el, ancestor);
+      minLeft = Math.min(minLeft, pos.left);
+      minTop = Math.min(minTop, pos.top);
+      maxRight = Math.max(maxRight, pos.left + el.offsetWidth);
+      maxBottom = Math.max(maxBottom, pos.top + el.offsetHeight);
+    }
+
+    return {
+      left: minLeft,
+      top: minTop,
+      width: maxRight - minLeft,
+      height: maxBottom - minTop,
+    };
+  });
 }
 
 function UserHighlightMark({

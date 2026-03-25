@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { usePaperStore } from "@/stores/paperStore";
+import { getToken } from "@/lib/auth";
 import HighlightLayer from "./HighlightLayer";
 import TextSelectionPopover from "./TextSelectionPopover";
 import FormulaPopover from "./FormulaPopover";
@@ -23,6 +24,13 @@ export default function PdfViewer({ fileUrl, paperId, structuredContent }: PdfVi
     usePaperStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRafRef = useRef<number | null>(null);
+
+  // Pass auth header to PDF.js fetch
+  const fileSource = useMemo(() => {
+    const token = getToken();
+    if (!token) return fileUrl;
+    return { url: fileUrl, httpHeaders: { Authorization: `Bearer ${token}` } };
+  }, [fileUrl]);
 
   const onDocumentLoadSuccess = useCallback(
     ({ numPages }: { numPages: number }) => {
@@ -68,7 +76,7 @@ export default function PdfViewer({ fileUrl, paperId, structuredContent }: PdfVi
       onScroll={handleScroll}
     >
       <Document
-        file={fileUrl}
+        file={fileSource}
         onLoadSuccess={onDocumentLoadSuccess}
         loading={
           <div className="flex items-center justify-center h-full">

@@ -1,17 +1,51 @@
 import axios from "axios";
+import { getToken } from "./auth";
 
 const api = axios.create({
   baseURL: "/api",
 });
+
+// Attach JWT token to every request
+api.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Redirect to /login on 401/403
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (
+      error.response?.status === 401 ||
+      error.response?.status === 403
+    ) {
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+/** Build auth headers for raw fetch calls (SSE streaming). */
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 // ── Paper Types ──────────────────────────────────────────────────────────────
 
 export interface PaperResponse {
   id: number;
   title: string;
+  authors: string[];
   filename: string;
   upload_date: string;
   total_pages: number;
+  tags: string[];
 }
 
 export interface PaperDetailResponse extends PaperResponse {
@@ -44,8 +78,11 @@ export async function uploadPaper(file: File): Promise<PaperResponse> {
   return data;
 }
 
-export async function listPapers(): Promise<PaperResponse[]> {
-  const { data } = await api.get<PaperResponse[]>("/papers");
+export async function listPapers(params?: {
+  q?: string;
+  tag?: string;
+}): Promise<PaperResponse[]> {
+  const { data } = await api.get<PaperResponse[]>("/papers", { params });
   return data;
 }
 
@@ -56,6 +93,11 @@ export async function getPaper(id: number): Promise<PaperDetailResponse> {
 
 export async function deletePaper(id: number): Promise<void> {
   await api.delete(`/papers/${id}`);
+}
+
+export async function getPaperFileBlob(id: number): Promise<Blob> {
+  const resp = await api.get(`/papers/${id}/file`, { responseType: "blob" });
+  return resp.data;
 }
 
 export function getPaperFileUrl(id: number): string {
@@ -130,6 +172,7 @@ export async function streamSummary(
 ): Promise<void> {
   const response = await fetch(`/api/ai/summary/${paperId}`, {
     method: "POST",
+    headers: authHeaders(),
     signal,
   });
 
@@ -164,7 +207,7 @@ export async function streamExplain(
 ): Promise<void> {
   const response = await fetch(`/api/ai/explain/${paperId}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({
       selected_text: selectedText,
       context,
@@ -196,7 +239,7 @@ export async function streamTranslate(
 ): Promise<void> {
   const response = await fetch(`/api/ai/translate/${paperId}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({
       text,
       page,
@@ -244,7 +287,7 @@ export async function streamChat(
 ): Promise<void> {
   const response = await fetch(`/api/ai/chat/${paperId}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ question, mode }),
     signal,
   });
@@ -350,5 +393,62 @@ export async function getFormulaLatex(
     `/ai/formula/${paperId}`,
     { page, bbox }
   );
+  return data;
+}
+
+// ── Tags API ────────────────────────────────────────────────────────────────
+
+export async function updatePaperTags(
+  paperId: number,
+  tags: string[]
+): Promise<PaperResponse> {
+  const { data } = await api.put<PaperResponse>(
+    `/papers/${paperId}/tags`,
+    tags
+  );
+  return data;
+}
+
+export async function listAllTags(): Promise<string[]> {
+  const { data } = await api.get<string[]>("/papers/meta/tags");
+  return data;
+}
+
+// ── Export API ───────────────────────────────────────────────────────────────
+
+export async function downloadExportMarkdown(paperId: number, filename: string): Promise<void> {
+  const resp = await api.get(`/papers/${paperId}/export/markdown`, {
+    responseType: "blob",
+  });
+  const url = URL.createObjectURL(resp.data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function getExportMarkdownUrl(paperId: number): string {
+  return `/api/papers/${paperId}/export/markdown`;
+}
+
+// ── Settings API ────────────────────────────────────────────────────────────
+
+export interface AppSettings {
+  api_key_configured: boolean;
+  default_language: string;
+  highlight_color: string;
+  claude_model: string;
+}
+
+export async function getSettings(): Promise<AppSettings> {
+  const { data } = await api.get<AppSettings>("/settings");
+  return data;
+}
+
+export async function updateSettings(
+  body: Partial<AppSettings>
+): Promise<AppSettings> {
+  const { data } = await api.put<AppSettings>("/settings", body);
   return data;
 }
