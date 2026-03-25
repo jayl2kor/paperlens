@@ -1,9 +1,12 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_user_paper_with_text
+from app.auth import get_current_user
 from app.database import get_db
-from app.models.paper import Paper
 from app.models.schemas import (
     AutoHighlightResponse,
     ChatMessageResponse,
@@ -14,26 +17,24 @@ from app.models.schemas import (
     FormulaResponse,
     TranslateRequest,
 )
+from app.models.user import User
 from app.services import ai_service
 from app.services.formula_extractor import extract_formula_latex
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 _SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
 
-def _get_paper(paper_id: int, db: Session) -> Paper:
-    paper = db.query(Paper).filter(Paper.id == paper_id).first()
-    if not paper:
-        raise HTTPException(status_code=404, detail="Paper not found")
-    if not paper.full_text:
-        raise HTTPException(status_code=422, detail="Paper has no extracted text")
-    return paper
-
-
 @router.post("/summary/{paper_id}")
-async def summary(paper_id: int, db: Session = Depends(get_db)):
-    paper = _get_paper(paper_id, db)
+async def summary(
+    paper_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    paper = get_user_paper_with_text(paper_id, user, db)
     return StreamingResponse(
         ai_service.stream_summary(paper_id, paper.full_text, db),
         media_type="text/event-stream",
@@ -42,22 +43,32 @@ async def summary(paper_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/auto-highlight/{paper_id}", response_model=AutoHighlightResponse)
-async def auto_highlight(paper_id: int, db: Session = Depends(get_db)):
-    paper = _get_paper(paper_id, db)
+async def auto_highlight(
+    paper_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    paper = get_user_paper_with_text(paper_id, user, db)
     try:
         highlights = await ai_service.get_auto_highlights(
             paper_id, paper.full_text, paper.structured_content or {}, db
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI 처리 오류: {e}")
+    except Exception:
+        logger.exception("Auto-highlight failed for paper %d", paper_id)
+        raise HTTPException(status_code=500, detail="AI 처리 중 오류가 발생했습니다.")
     return {"highlights": highlights}
 
 
 @router.post("/explain/{paper_id}")
-async def explain(paper_id: int, body: ExplainRequest, db: Session = Depends(get_db)):
-    _get_paper(paper_id, db)  # validate paper exists
+async def explain(
+    paper_id: int,
+    body: ExplainRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    get_user_paper_with_text(paper_id, user, db)
     return StreamingResponse(
         ai_service.stream_explain(
             selected_text=body.selected_text,
@@ -71,9 +82,12 @@ async def explain(paper_id: int, body: ExplainRequest, db: Session = Depends(get
 
 @router.post("/translate/{paper_id}")
 async def translate(
-    paper_id: int, body: TranslateRequest, db: Session = Depends(get_db)
+    paper_id: int,
+    body: TranslateRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    _get_paper(paper_id, db)  # validate paper exists
+    get_user_paper_with_text(paper_id, user, db)
     return StreamingResponse(
         ai_service.stream_translate(
             text=body.text,
@@ -89,9 +103,12 @@ async def translate(
 
 @router.post("/formula/{paper_id}", response_model=FormulaResponse)
 async def formula(
-    paper_id: int, body: FormulaRequest, db: Session = Depends(get_db)
+    paper_id: int,
+    body: FormulaRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    paper = _get_paper(paper_id, db)
+    paper = get_user_paper_with_text(paper_id, user, db)
     try:
         latex = await extract_formula_latex(
             file_path=paper.file_path,
@@ -100,14 +117,20 @@ async def formula(
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"수식 추출 오류: {e}")
+    except Exception:
+        logger.exception("Formula extraction failed for paper %d", paper_id)
+        raise HTTPException(status_code=500, detail="수식 추출 중 오류가 발생했습니다.")
     return {"latex": latex, "page": body.page}
 
 
 @router.post("/chat/{paper_id}")
-async def chat(paper_id: int, body: ChatRequest, db: Session = Depends(get_db)):
-    paper = _get_paper(paper_id, db)
+async def chat(
+    paper_id: int,
+    body: ChatRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    paper = get_user_paper_with_text(paper_id, user, db)
     return StreamingResponse(
         ai_service.stream_chat(
             paper_id=paper_id,
@@ -123,17 +146,27 @@ async def chat(paper_id: int, body: ChatRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/chat/{paper_id}/history", response_model=list[ChatMessageResponse])
-async def chat_history(paper_id: int, db: Session = Depends(get_db)):
+async def chat_history(
+    paper_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    get_user_paper_with_text(paper_id, user, db)
     return ai_service.get_chat_history(paper_id, db)
 
 
 @router.post("/citations/{paper_id}", response_model=CitationsResponse)
-async def citations(paper_id: int, db: Session = Depends(get_db)):
-    paper = _get_paper(paper_id, db)
+async def citations(
+    paper_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    paper = get_user_paper_with_text(paper_id, user, db)
     try:
         result = await ai_service.get_citations(paper_id, paper.full_text, db)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"인용 분석 오류: {e}")
+    except Exception:
+        logger.exception("Citation extraction failed for paper %d", paper_id)
+        raise HTTPException(status_code=500, detail="인용 분석 중 오류가 발생했습니다.")
     return {"citations": result}

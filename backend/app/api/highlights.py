@@ -1,30 +1,29 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_user_paper
+from app.auth import get_current_user
 from app.database import get_db
 from app.models.highlight import UserHighlight
-from app.models.paper import Paper
 from app.models.schemas import (
     UserHighlightCreate,
     UserHighlightResponse,
     UserHighlightUpdate,
 )
+from app.models.user import User
 
 router = APIRouter(prefix="/api/papers", tags=["highlights"])
-
-
-def _get_paper_or_404(paper_id: int, db: Session) -> Paper:
-    paper = db.query(Paper).filter(Paper.id == paper_id).first()
-    if not paper:
-        raise HTTPException(status_code=404, detail="Paper not found")
-    return paper
 
 
 @router.get(
     "/{paper_id}/highlights", response_model=list[UserHighlightResponse]
 )
-def list_highlights(paper_id: int, db: Session = Depends(get_db)):
-    _get_paper_or_404(paper_id, db)
+def list_highlights(
+    paper_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    get_user_paper(paper_id, user, db)
     return (
         db.query(UserHighlight)
         .filter(UserHighlight.paper_id == paper_id)
@@ -39,9 +38,10 @@ def list_highlights(paper_id: int, db: Session = Depends(get_db)):
 def create_highlight(
     paper_id: int,
     body: UserHighlightCreate,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_paper_or_404(paper_id, db)
+    get_user_paper(paper_id, user, db)
     highlight = UserHighlight(paper_id=paper_id, **body.model_dump())
     db.add(highlight)
     db.commit()
@@ -57,8 +57,10 @@ def update_highlight(
     paper_id: int,
     highlight_id: int,
     body: UserHighlightUpdate,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    get_user_paper(paper_id, user, db)
     highlight = (
         db.query(UserHighlight)
         .filter(
@@ -83,8 +85,10 @@ def update_highlight(
 def delete_highlight(
     paper_id: int,
     highlight_id: int,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    get_user_paper(paper_id, user, db)
     highlight = (
         db.query(UserHighlight)
         .filter(

@@ -1,17 +1,21 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 ChatMode = Literal["general", "limitations", "connections"]
+ContentType = Literal["sentence", "table", "formula"]
+TargetLanguage = Literal["ko", "en", "ja", "zh"]
 
 
 class PaperResponse(BaseModel):
     id: int
     title: str
+    authors: list[str] = []
     filename: str
     upload_date: datetime
     total_pages: int
+    tags: list[str] = []
 
     model_config = {"from_attributes": True}
 
@@ -42,16 +46,16 @@ class AutoHighlightResponse(BaseModel):
 
 
 class ExplainRequest(BaseModel):
-    selected_text: str
-    context: str = ""  # surrounding text for better explanation
-    content_type: str = "sentence"  # sentence, table, formula
+    selected_text: str = Field(..., max_length=10_000)
+    context: str = Field("", max_length=50_000)
+    content_type: ContentType = "sentence"
     page: int = 1
 
 
 class TranslateRequest(BaseModel):
-    text: str
+    text: str = Field(..., max_length=100_000)
     page: int = 1
-    target_language: str = "ko"
+    target_language: TargetLanguage = "ko"
 
 
 class FormulaRequest(BaseModel):
@@ -68,7 +72,7 @@ class FormulaResponse(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    question: str
+    question: str = Field(..., max_length=5_000)
     mode: ChatMode = "general"
 
 
@@ -99,10 +103,10 @@ HighlightColor = Literal["yellow", "green", "blue", "pink", "purple"]
 
 
 class UserHighlightCreate(BaseModel):
-    text: str
+    text: str = Field(..., max_length=50_000)
     color: HighlightColor = "yellow"
     page: int
-    note: str | None = None
+    note: str | None = Field(None, max_length=10_000)
 
 
 class UserHighlightUpdate(BaseModel):

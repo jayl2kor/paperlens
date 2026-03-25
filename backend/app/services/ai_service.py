@@ -153,19 +153,32 @@ JSON 형식:
 
 MAX_TEXT_CHARS = 600_000  # ~150K tokens
 
-_NO_KEY_MSG = "ANTHROPIC_API_KEY가 설정되지 않았습니다."
+_NO_KEY_MSG = "ANTHROPIC_API_KEY가 설정되지 않았습니다. 설정 페이지에서 API 키를 입력하세요."
 
 _client: anthropic.AsyncAnthropic | None = None
+_client_key: str = ""
+
+
+def _resolve_api_key() -> str:
+    """Resolve API key from environment/config only."""
+    return settings.anthropic_api_key
 
 
 def get_client() -> anthropic.AsyncAnthropic:
-    """Return a shared AsyncAnthropic client instance."""
-    global _client
-    if not settings.anthropic_api_key:
+    """Return a shared AsyncAnthropic client, recreating if the key changed."""
+    global _client, _client_key
+    api_key = _resolve_api_key()
+    if not api_key:
         raise ValueError(_NO_KEY_MSG)
-    if _client is None:
-        _client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    if _client is None or _client_key != api_key:
+        _client = anthropic.AsyncAnthropic(api_key=api_key)
+        _client_key = api_key
     return _client
+
+
+def _resolve_model() -> str:
+    """Resolve Claude model from config."""
+    return settings.claude_model
 
 
 def _truncate(text: str) -> str:
@@ -218,7 +231,7 @@ async def _cached_json_call(
 
     client = get_client()
     response = await client.messages.create(
-        model=settings.claude_model,
+        model=_resolve_model(),
         max_tokens=4000,
         system=system,
         messages=[{"role": "user", "content": user_msg}],
@@ -255,7 +268,7 @@ async def stream_summary(
     full_response = ""
     try:
         async with client.messages.stream(
-            model=settings.claude_model,
+            model=_resolve_model(),
             max_tokens=2000,
             system=SUMMARY_SYSTEM,
             messages=[
@@ -295,7 +308,7 @@ async def stream_explain(
 
     try:
         async with client.messages.stream(
-            model=settings.claude_model,
+            model=_resolve_model(),
             max_tokens=2000,
             system=EXPLAIN_SYSTEM,
             messages=[{"role": "user", "content": user_msg}],
@@ -315,7 +328,7 @@ async def stream_translate(
     db: Session,
 ) -> AsyncGenerator[str, None]:
     """Stream a translation of the given text via SSE. Caches per paper+page."""
-    text_hash = hashlib.md5(text.encode()).hexdigest()[:8]
+    text_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
     cache_key = f"translate_p{page}_{target_language}_{text_hash}"
     cached = _get_cache(db, paper_id, cache_key)
     if cached:
@@ -336,7 +349,7 @@ async def stream_translate(
     full_response = ""
     try:
         async with client.messages.stream(
-            model=settings.claude_model,
+            model=_resolve_model(),
             max_tokens=4000,
             system=TRANSLATE_SYSTEM,
             messages=[{"role": "user", "content": user_msg}],
@@ -367,7 +380,7 @@ async def get_auto_highlights(
     text = _truncate(full_text)
 
     response = await client.messages.create(
-        model=settings.claude_model,
+        model=_resolve_model(),
         max_tokens=4000,
         system=AUTO_HIGHLIGHT_SYSTEM,
         messages=[
@@ -424,7 +437,7 @@ async def stream_chat(
     full_response = ""
     try:
         async with client.messages.stream(
-            model=settings.claude_model,
+            model=_resolve_model(),
             max_tokens=3000,
             system=system,
             messages=messages,
