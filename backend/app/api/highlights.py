@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_user_paper
-from app.auth import get_current_user
+from app.api.deps import get_accessible_paper
+from app.auth import get_optional_user
 from app.database import get_db
 from app.models.highlight import UserHighlight
 from app.models.schemas import (
@@ -20,10 +20,11 @@ router = APIRouter(prefix="/api/papers", tags=["highlights"])
 )
 def list_highlights(
     paper_id: int,
-    user: User = Depends(get_current_user),
+    request: Request,
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    get_user_paper(paper_id, user, db)
+    get_accessible_paper(paper_id, user, request, db)
     return (
         db.query(UserHighlight)
         .filter(UserHighlight.paper_id == paper_id)
@@ -38,10 +39,11 @@ def list_highlights(
 def create_highlight(
     paper_id: int,
     body: UserHighlightCreate,
-    user: User = Depends(get_current_user),
+    request: Request,
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    get_user_paper(paper_id, user, db)
+    get_accessible_paper(paper_id, user, request, db)
     highlight = UserHighlight(paper_id=paper_id, **body.model_dump())
     db.add(highlight)
     db.commit()
@@ -57,10 +59,11 @@ def update_highlight(
     paper_id: int,
     highlight_id: int,
     body: UserHighlightUpdate,
-    user: User = Depends(get_current_user),
+    request: Request,
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    get_user_paper(paper_id, user, db)
+    get_accessible_paper(paper_id, user, request, db)
     highlight = (
         db.query(UserHighlight)
         .filter(
@@ -85,10 +88,11 @@ def update_highlight(
 def delete_highlight(
     paper_id: int,
     highlight_id: int,
-    user: User = Depends(get_current_user),
+    request: Request,
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    get_user_paper(paper_id, user, db)
+    get_accessible_paper(paper_id, user, request, db)
     highlight = (
         db.query(UserHighlight)
         .filter(

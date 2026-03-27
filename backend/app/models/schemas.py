@@ -49,18 +49,25 @@ class ExplainRequest(BaseModel):
     selected_text: str = Field(..., max_length=10_000)
     context: str = Field("", max_length=50_000)
     content_type: ContentType = "sentence"
-    page: int = 1
+    page: int = Field(1, ge=1)
 
 
 class TranslateRequest(BaseModel):
     text: str = Field(..., max_length=100_000)
-    page: int = 1
+    page: int = Field(1, ge=1)
     target_language: TargetLanguage = "ko"
 
 
+class BBox(BaseModel):
+    x: float = Field(..., ge=0, le=10_000)
+    y: float = Field(..., ge=0, le=10_000)
+    w: float = Field(..., gt=0, le=5_000)
+    h: float = Field(..., gt=0, le=5_000)
+
+
 class FormulaRequest(BaseModel):
-    page: int
-    bbox: dict  # {x, y, w, h} in PDF coordinates
+    page: int = Field(..., ge=1)
+    bbox: BBox
 
 
 class FormulaResponse(BaseModel):
@@ -111,7 +118,7 @@ class UserHighlightCreate(BaseModel):
 
 class UserHighlightUpdate(BaseModel):
     color: HighlightColor | None = None
-    note: str | None = None
+    note: str | None = Field(None, max_length=10_000)
 
 
 class UserHighlightResponse(BaseModel):

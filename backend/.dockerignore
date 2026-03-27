@@ -2,6 +2,7 @@ __pycache__
 *.pyc
 .venv
 .env
-*.db
+**/*.db
+data/
 uploads/
 .git

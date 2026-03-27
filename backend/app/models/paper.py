@@ -1,6 +1,11 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
+from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy.types import Text as _Text
+
+# MySQL TEXT is 64KB — use LONGTEXT for full paper text and structured content
+Text = LONGTEXT().with_variant(_Text(), "sqlite")
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -12,6 +17,9 @@ class Paper(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=True, index=True
+    )
+    guest_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(String(500), default="Untitled")
     authors: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list)

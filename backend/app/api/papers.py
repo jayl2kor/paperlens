@@ -4,14 +4,14 @@ import uuid
 from itertools import groupby
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-from app.api.deps import get_user_paper
-from app.auth import get_current_user
+from app.api.deps import get_accessible_paper, get_guest_id
+from app.auth import get_optional_user
 from app.config import settings
 from app.database import get_db
 from app.models.ai_cache import AiCache
@@ -19,7 +19,6 @@ from app.models.highlight import UserHighlight
 from app.models.paper import Paper
 from app.models.schemas import PaperDetailResponse, PaperResponse
 from app.models.user import User
-from app.services.pdf_parser import extract_pdf_data
 
 router = APIRouter(prefix="/api/papers", tags=["papers"])
 
@@ -27,7 +26,8 @@ router = APIRouter(prefix="/api/papers", tags=["papers"])
 @router.post("/upload", response_model=PaperResponse)
 async def upload_paper(
     file: UploadFile,
-    user: User = Depends(get_current_user),
+    request: Request,
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
@@ -53,6 +53,8 @@ async def upload_paper(
 
     # Extract PDF data
     try:
+        from app.services.pdf_parser import extract_pdf_data
+
         pdf_data = extract_pdf_data(str(file_path))
     except Exception:
         file_path.unlink(missing_ok=True)
@@ -61,7 +63,8 @@ async def upload_paper(
 
     # Create DB record
     paper = Paper(
-        user_id=user.id,
+        user_id=user.id if user else None,
+        guest_id=get_guest_id(request) if user is None else None,
         title=pdf_data["title"],
         authors=pdf_data.get("authors", []),
         filename=file.filename,
@@ -79,12 +82,17 @@ async def upload_paper(
 
 @router.get("", response_model=list[PaperResponse])
 def list_papers(
+    request: Request,
     q: str | None = Query(None, description="검색어 (제목/파일명)"),
     tag: str | None = Query(None, description="태그 필터"),
-    user: User = Depends(get_current_user),
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Paper).filter(Paper.user_id == user.id)
+    if user:
+        query = db.query(Paper).filter(Paper.user_id == user.id)
+    else:
+        guest_id = get_guest_id(request)
+        query = db.query(Paper).filter(Paper.guest_id == guest_id)
     if q:
         pattern = f"%{q}%"
         query = query.filter(
@@ -100,19 +108,21 @@ def list_papers(
 @router.get("/{paper_id}", response_model=PaperDetailResponse)
 def get_paper(
     paper_id: int,
-    user: User = Depends(get_current_user),
+    request: Request,
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    return get_user_paper(paper_id, user, db)
+    return get_accessible_paper(paper_id, user, request, db)
 
 
 @router.get("/{paper_id}/file")
 def get_paper_file(
     paper_id: int,
-    user: User = Depends(get_current_user),
+    request: Request,
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    paper = get_user_paper(paper_id, user, db)
+    paper = get_accessible_paper(paper_id, user, request, db)
 
     file_path = Path(paper.file_path).resolve()
     upload_dir = Path(settings.upload_dir).resolve()
@@ -131,10 +141,11 @@ def get_paper_file(
 @router.delete("/{paper_id}")
 def delete_paper(
     paper_id: int,
-    user: User = Depends(get_current_user),
+    request: Request,
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    paper = get_user_paper(paper_id, user, db)
+    paper = get_accessible_paper(paper_id, user, request, db)
 
     # Delete file
     Path(paper.file_path).unlink(missing_ok=True)
@@ -153,12 +164,13 @@ def delete_paper(
 def update_tags(
     paper_id: int,
     tags: list[str],
-    user: User = Depends(get_current_user),
+    request: Request,
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    paper = get_user_paper(paper_id, user, db)
+    paper = get_accessible_paper(paper_id, user, request, db)
     # Deduplicate & limit
-    unique_tags = list(dict.fromkeys(t.strip() for t in tags if t.strip()))[:20]
+    unique_tags = list(dict.fromkeys(t.strip()[:100] for t in tags if t.strip()))[:20]
     paper.tags = unique_tags
     db.commit()
     db.refresh(paper)
@@ -167,15 +179,21 @@ def update_tags(
 
 @router.get("/meta/tags")
 def list_all_tags(
-    user: User = Depends(get_current_user),
+    request: Request,
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
     """Return all unique tags across the user's papers."""
-    papers = (
-        db.query(Paper.tags)
-        .filter(Paper.user_id == user.id, Paper.tags.isnot(None))
-        .all()
-    )
+    if user:
+        query = db.query(Paper.tags).filter(
+            Paper.user_id == user.id, Paper.tags.isnot(None)
+        )
+    else:
+        guest_id = get_guest_id(request)
+        query = db.query(Paper.tags).filter(
+            Paper.guest_id == guest_id, Paper.tags.isnot(None)
+        )
+    papers = query.all()
     tag_set: set[str] = set()
     for (tags_json,) in papers:
         if isinstance(tags_json, list):
@@ -198,10 +216,11 @@ COLOR_EMOJI = {
 @router.get("/{paper_id}/export/markdown")
 def export_markdown(
     paper_id: int,
-    user: User = Depends(get_current_user),
+    request: Request,
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    paper = get_user_paper(paper_id, user, db)
+    paper = get_accessible_paper(paper_id, user, request, db)
 
     highlights = (
         db.query(UserHighlight)

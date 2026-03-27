@@ -14,6 +14,7 @@ from app.models.user import User
 
 _ALGORITHM = "HS256"
 _security = HTTPBearer()
+_security_optional = HTTPBearer(auto_error=False)
 
 
 def hash_password(password: str) -> str:
@@ -52,3 +53,18 @@ def get_current_user(
             detail="사용자를 찾을 수 없습니다.",
         )
     return user
+
+
+def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_security_optional),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """Return authenticated User, or None for guest access."""
+    if credentials is None:
+        return None
+    try:
+        payload = jwt.decode(credentials.credentials, settings.jwt_secret, algorithms=[_ALGORITHM])
+        user_id = int(payload["sub"])
+    except (JWTError, KeyError, ValueError):
+        return None
+    return db.query(User).filter(User.id == user_id).first()
