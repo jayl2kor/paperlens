@@ -35,10 +35,20 @@ def extract_pdf_data(file_path: str) -> dict:
         for block in page.get_text("dict")["blocks"]:
             if block["type"] == 0:  # text block
                 block_text = ""
+                line_infos = []
                 for line in block["lines"]:
+                    line_text = ""
                     for span in line["spans"]:
-                        block_text += span["text"]
-                    block_text += "\n"
+                        line_text += span["text"]
+                    block_text += line_text + "\n"
+                    lb = line["bbox"]
+                    line_infos.append({
+                        "text": line_text.strip(),
+                        "bbox": {
+                            "x": lb[0], "y": lb[1],
+                            "w": lb[2] - lb[0], "h": lb[3] - lb[1],
+                        },
+                    })
 
                 blocks.append(
                     {
@@ -50,6 +60,7 @@ def extract_pdf_data(file_path: str) -> dict:
                             "h": block["bbox"][3] - block["bbox"][1],
                         },
                         "type": "text",
+                        "lines": line_infos,
                     }
                 )
             elif block["type"] == 1:  # image block
