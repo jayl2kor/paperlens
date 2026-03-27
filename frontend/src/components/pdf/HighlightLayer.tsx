@@ -226,12 +226,21 @@ function UserHighlightMark({
 
   const [rects, setRects] = useState<Rect[]>([]);
 
-  // DOM measurement must happen after render; defer setState via queueMicrotask
-  // to satisfy the react-hooks/set-state-in-effect lint rule.
+  // textLayer renders asynchronously — retry until spans appear
   useEffect(() => {
-    queueMicrotask(() => {
-      setRects(findHighlightRects(pageNumber, highlight.text));
-    });
+    let attempts = 0;
+    const maxAttempts = 10;
+    const tryFind = () => {
+      const found = findHighlightRects(pageNumber, highlight.text);
+      if (found.length > 0 || attempts >= maxAttempts) {
+        setRects(found);
+        return;
+      }
+      attempts++;
+      setTimeout(tryFind, 200);
+    };
+    const timer = setTimeout(tryFind, 100);
+    return () => clearTimeout(timer);
   }, [highlight.text, pageNumber, scale]);
 
   if (rects.length === 0) return null;

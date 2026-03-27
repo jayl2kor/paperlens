@@ -72,7 +72,8 @@ export default function PdfViewer({ fileUrl, paperId, structuredContent }: PdfVi
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-auto bg-neutral-100 dark:bg-neutral-900 relative"
+      className="min-w-0 overflow-auto bg-neutral-100 dark:bg-neutral-900 relative"
+      style={{ flex: "1 1 60%" }}
       onScroll={handleScroll}
     >
       <Document

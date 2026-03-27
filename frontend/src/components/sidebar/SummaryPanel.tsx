@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import { usePaperStore } from "@/stores/paperStore";
 import { streamSummary } from "@/lib/api";
+import { SparklesIcon, BeakerIcon, ChartBarIcon, DocumentIcon } from "@/components/icons";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
 
 // ── 섹션 카드 스타일 매핑 ────────────────────────────────────────────────
 
 interface SectionStyle {
-  icon: string;
+  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  iconClass: string;
   borderClass: string;
   bgClass: string;
   labelClass: string;
@@ -18,7 +20,8 @@ const SECTION_STYLES: { keyword: string; style: SectionStyle }[] = [
   {
     keyword: "요약",
     style: {
-      icon: "💡",
+      Icon: SparklesIcon,
+      iconClass: "text-blue-500",
       borderClass: "border-l-blue-500",
       bgClass: "bg-blue-500/5",
       labelClass: "text-blue-600 dark:text-blue-400",
@@ -27,7 +30,8 @@ const SECTION_STYLES: { keyword: string; style: SectionStyle }[] = [
   {
     keyword: "방법",
     style: {
-      icon: "🔬",
+      Icon: BeakerIcon,
+      iconClass: "text-purple-500",
       borderClass: "border-l-purple-500",
       bgClass: "bg-purple-500/5",
       labelClass: "text-purple-600 dark:text-purple-400",
@@ -36,7 +40,8 @@ const SECTION_STYLES: { keyword: string; style: SectionStyle }[] = [
   {
     keyword: "결과",
     style: {
-      icon: "📊",
+      Icon: ChartBarIcon,
+      iconClass: "text-emerald-500",
       borderClass: "border-l-emerald-500",
       bgClass: "bg-emerald-500/5",
       labelClass: "text-emerald-600 dark:text-emerald-400",
@@ -45,7 +50,8 @@ const SECTION_STYLES: { keyword: string; style: SectionStyle }[] = [
 ];
 
 const DEFAULT_STYLE: SectionStyle = {
-  icon: "📄",
+  Icon: DocumentIcon,
+  iconClass: "text-foreground/50",
   borderClass: "border-l-foreground/20",
   bgClass: "bg-foreground/3",
   labelClass: "text-foreground/60",
@@ -105,10 +111,7 @@ function parseSections(markdown: string): Section[] {
 
 // ── 섹션 카드 컴포넌트 ───────────────────────────────────────────────────
 
-const PROSE_CLASSES =
-  "prose prose-sm dark:prose-invert max-w-none text-foreground/80 " +
-  "[&_p]:my-1.5 [&_ol]:pl-5 [&_ul]:pl-5 [&_li]:my-0.5 " +
-  "[&_strong]:text-foreground [&_code]:text-xs [&_code]:bg-foreground/5 [&_code]:px-1 [&_code]:rounded";
+// MarkdownRenderer handles prose styling + KaTeX math
 
 function SectionCard({
   section,
@@ -121,13 +124,10 @@ function SectionCard({
 }) {
   const { title, content, style } = section;
 
-  // 제목 없는 서문
   if (!title) {
     return (
       <div className={`rounded-lg border-l-3 p-3 mb-3 ${style.borderClass} ${style.bgClass}`}>
-        <div className={PROSE_CLASSES}>
-          <ReactMarkdown>{content}</ReactMarkdown>
-        </div>
+        <MarkdownRenderer>{content}</MarkdownRenderer>
       </div>
     );
   }
@@ -135,28 +135,25 @@ function SectionCard({
   return (
     <div className={`rounded-lg border-l-3 p-3 mb-3 ${style.borderClass} ${style.bgClass}`}>
       <div className="flex items-center gap-1.5 mb-2">
-        <span className="text-sm">{style.icon}</span>
-        <span
-          className={`text-xs font-semibold uppercase tracking-wide ${style.labelClass}`}
-        >
+        <style.Icon className={`w-4 h-4 shrink-0 ${style.iconClass}`} />
+        <span className={`text-xs font-semibold uppercase tracking-wide ${style.labelClass}`}>
           {title}
         </span>
       </div>
-      {content && (
-        <div className={PROSE_CLASSES}>
-          <ReactMarkdown>{content}</ReactMarkdown>
+      {content ? (
+        <>
+          <MarkdownRenderer>{content}</MarkdownRenderer>
           {isLast && isStreaming && (
             <span className="inline-block w-1.5 h-4 bg-blue-500 animate-pulse ml-0.5 align-middle" />
           )}
-        </div>
-      )}
-      {!content && isLast && isStreaming && (
+        </>
+      ) : isLast && isStreaming ? (
         <div className="flex items-center gap-1.5 mt-1">
           <span className="w-1.5 h-1.5 bg-foreground/30 rounded-full animate-bounce" />
           <span className="w-1.5 h-1.5 bg-foreground/30 rounded-full animate-bounce [animation-delay:0.15s]" />
           <span className="w-1.5 h-1.5 bg-foreground/30 rounded-full animate-bounce [animation-delay:0.3s]" />
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -285,8 +282,8 @@ export default function SummaryPanel({ paperId }: SummaryPanelProps) {
         {/* ## 가 아직 없는 초기 스트리밍 텍스트 */}
         {summaryLoading && summary && sections.length === 0 && (
           <div className={`rounded-lg border-l-3 p-3 ${DEFAULT_STYLE.borderClass} ${DEFAULT_STYLE.bgClass}`}>
-            <div className={PROSE_CLASSES}>
-              <ReactMarkdown>{summary}</ReactMarkdown>
+            <div>
+              <MarkdownRenderer>{summary}</MarkdownRenderer>
               <span className="inline-block w-1.5 h-4 bg-blue-500 animate-pulse ml-0.5 align-middle" />
             </div>
           </div>

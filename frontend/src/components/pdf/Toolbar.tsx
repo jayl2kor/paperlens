@@ -45,7 +45,7 @@ export default function Toolbar({ title, onSettingsClick }: ToolbarProps) {
       <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={() => router.push("/")}
-          className="p-1.5 rounded hover:bg-foreground/10 transition-colors"
+          className="p-2.5 -m-1 rounded hover:bg-foreground/10 transition-colors"
           title="홈으로"
         >
           <svg
@@ -86,7 +86,7 @@ export default function Toolbar({ title, onSettingsClick }: ToolbarProps) {
         <div className="flex items-center gap-1">
           <button
             onClick={zoomOut}
-            className="p-1.5 rounded hover:bg-foreground/10 transition-colors"
+            className="p-2.5 -m-1 rounded hover:bg-foreground/10 transition-colors"
             title="축소"
           >
             <svg
@@ -108,7 +108,7 @@ export default function Toolbar({ title, onSettingsClick }: ToolbarProps) {
           </span>
           <button
             onClick={zoomIn}
-            className="p-1.5 rounded hover:bg-foreground/10 transition-colors"
+            className="p-2.5 -m-1 rounded hover:bg-foreground/10 transition-colors"
             title="확대"
           >
             <svg
