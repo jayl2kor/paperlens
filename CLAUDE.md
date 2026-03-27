@@ -1,4 +1,4 @@
-# paper-insight
+# paperlens
 
 AI 기반 논문 리딩 도구 — 요약, 수식 설명, 번역, AI 토론 등으로 논문 파악 시간을 획기적으로 단축
 
@@ -23,7 +23,7 @@ npm run dev
 
 ## Key Files
 ```
-paper-insight/
+paperlens/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py          # FastAPI 앱 엔트리포인트

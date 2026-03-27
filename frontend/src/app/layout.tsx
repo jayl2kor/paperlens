@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Paper Insight — AI 논문 리딩 도구",
+  title: "Paperlens — AI 논문 리딩 도구",
   description:
     "논문을 읽는 시간을 획기적으로 단축하는 AI 기반 논문 리딩 도구",
 };

@@ -42,7 +42,7 @@ export default function HomePage() {
       });
       setPapers(data);
     } catch {
-      // API not available yet
+      // handled by 401 interceptor
     }
   }, [searchQuery, selectedTag]);
 
@@ -51,26 +51,23 @@ export default function HomePage() {
       const tags = await listAllTags();
       setAllTags(tags);
     } catch {
-      // ignore
+      // handled by 401 interceptor
     }
   }, []);
 
-  // Auth guard
+  // Load user if authenticated, and kick off tag loading
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.replace("/login");
-    } else {
+    if (isAuthenticated()) {
       setUser(getUser());
     }
-  }, [router]);
+    loadTags();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // Fetch papers on mount and when search/tag filters change
   useEffect(() => {
     loadPapers();
-  }, [loadPapers]);
-
-  useEffect(() => {
-    loadTags();
-  }, [loadTags]);
+  }, [searchQuery, selectedTag]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -171,7 +168,7 @@ export default function HomePage() {
     <div className="min-h-full flex flex-col items-center px-4 py-16">
       {/* Header */}
       <div className="flex items-center gap-3 mb-2">
-        <h1 className="text-3xl font-bold">Paper Insight</h1>
+        <h1 className="text-3xl font-bold">Paperlens</h1>
         <button
           onClick={() => setSettingsOpen(true)}
           className="p-2 rounded-lg text-foreground/50 hover:text-foreground/80 hover:bg-foreground/5 transition-colors"
@@ -198,19 +195,26 @@ export default function HomePage() {
             />
           </svg>
         </button>
-        {user && (
+        {user ? (
           <div className="flex items-center gap-2 ml-2">
             <span className="text-sm text-foreground/50">{user.name}</span>
             <button
               onClick={() => {
                 logout();
-                router.push("/login");
+                window.location.reload();
               }}
               className="text-xs text-foreground/40 hover:text-foreground/70 transition-colors"
             >
               로그아웃
             </button>
           </div>
+        ) : (
+          <button
+            onClick={() => router.push("/login")}
+            className="ml-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+          >
+            로그인
+          </button>
         )}
       </div>
       <p className="text-foreground/60 mb-12">

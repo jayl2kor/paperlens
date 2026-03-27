@@ -8,8 +8,8 @@ _logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
-    app_name: str = "paper-insight"
-    database_url: str = "sqlite:///./data/paper_insight.db"
+    app_name: str = "paperlens"
+    database_url: str = "mysql+pymysql://paperlens:paperlens@localhost:3306/paperlens?charset=utf8mb4"
     upload_dir: str = str(Path(__file__).parent.parent / "uploads")
     max_upload_size_mb: int = 50
     anthropic_api_key: str = ""
@@ -34,6 +34,5 @@ if not settings.jwt_secret:
         "Set JWT_SECRET in .env or environment for production."
     )
 
-# Ensure required directories exist
+# Ensure upload directory exists
 Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
-Path("data").mkdir(parents=True, exist_ok=True)

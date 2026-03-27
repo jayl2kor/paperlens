@@ -47,7 +47,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-full flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-center mb-2">Paper Insight</h1>
+        <h1 className="text-2xl font-bold text-center mb-2">Paperlens</h1>
         <p className="text-foreground/50 text-center text-sm mb-8">
           AI 기반 논문 리딩 도구
         </p>

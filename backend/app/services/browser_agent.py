@@ -248,7 +248,7 @@ async def verify_frontend(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="paper-insight 브라우저 에이전트")
+    parser = argparse.ArgumentParser(description="paperlens 브라우저 에이전트")
     sub = parser.add_subparsers(dest="command", required=True)
 
     search_p = sub.add_parser("search", help="논문 검색 및 다운로드")

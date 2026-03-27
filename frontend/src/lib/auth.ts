@@ -1,7 +1,7 @@
 import axios from "axios";
 
-const TOKEN_KEY = "paper-insight-token";
-const USER_KEY = "paper-insight-user";
+const TOKEN_KEY = "paperlens-token";
+const USER_KEY = "paperlens-user";
 
 export interface UserInfo {
   id: number;

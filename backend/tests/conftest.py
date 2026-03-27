@@ -1,4 +1,4 @@
-"""Shared test fixtures for paper-insight backend tests."""
+"""Shared test fixtures for paperlens backend tests."""
 
 import os
 from collections.abc import Generator

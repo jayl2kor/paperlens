@@ -1,12 +1,12 @@
-# Requirements: paper-insight
+# Requirements: paperlens
 
 Generated: 2026-03-22
 
 ## Project
-- **name**: paper-insight
+- **name**: paperlens
 - **purpose**: AI 기반 논문 리딩 도구 — 요약, 수식 설명, 번역, AI 토론 등으로 논문 파악 시간을 획기적으로 단축
 - **users**: 논문을 읽는 모든 사람 (연구자, 학생, 개발자 등)
-- **repo_path**: /Users/user/git/paper-insight
+- **repo_path**: /Users/user/git/paperlens
 
 ## Stack
 - **language**: Python, TypeScript
