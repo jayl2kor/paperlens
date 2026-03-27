@@ -1,22 +1,34 @@
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.pool import QueuePool
 
 from app.config import settings
 
-engine = create_engine(
-    settings.database_url,
-    connect_args={"check_same_thread": False},  # SQLite only
-)
+_is_sqlite = settings.database_url.startswith("sqlite")
 
-# Enable foreign key constraints for SQLite (required for CASCADE deletes)
-@event.listens_for(engine, "connect")
-def _set_sqlite_pragma(dbapi_connection, connection_record):
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
+_engine_kwargs: dict = {}
+if _is_sqlite:
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    _engine_kwargs["pool_pre_ping"] = True
+    _engine_kwargs["poolclass"] = QueuePool
+    _engine_kwargs["pool_size"] = 5
+    _engine_kwargs["max_overflow"] = 10
+
+engine = create_engine(settings.database_url, **_engine_kwargs)
+
+# Enable foreign key constraints for SQLite
+if _is_sqlite:
+    from sqlalchemy import event
+
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -35,7 +47,7 @@ def get_db() -> Generator[Session, None, None]:
 
 @contextmanager
 def db_session():
-    """Standalone DB session for use outside FastAPI dependency injection (e.g. async generators)."""
+    """Standalone DB session for use outside FastAPI dependency injection."""
     db = SessionLocal()
     try:
         yield db

@@ -1,23 +1,47 @@
+name: paperlens
+
 services:
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    volumes:
+      - paperlens_mysql:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-paperlens}
+      MYSQL_DATABASE: paperlens
+      MYSQL_USER: paperlens
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-paperlens}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   backend:
     build: ./backend
     ports:
-      - "8081:8081"
+      - "8001:8001"
     volumes:
-      - paper_uploads:/app/uploads
-      - paper_db:/app/data
+      - paperlens_uploads:/app/uploads
     environment:
+      - DATABASE_URL=mysql+pymysql://paperlens:${MYSQL_PASSWORD:-paperlens}@mysql:3306/paperlens?charset=utf8mb4
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
+    depends_on:
+      mysql:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
     build:
       context: ./frontend
       args:
-        - BACKEND_URL=http://backend:8081
+        - BACKEND_URL=http://backend:8001
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - HOSTNAME=0.0.0.0
     depends_on:
@@ -25,5 +49,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  paper_uploads:
-  paper_db:
+  paperlens_mysql:
+  paperlens_uploads:

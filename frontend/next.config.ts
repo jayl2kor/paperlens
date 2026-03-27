@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: process.env.DOCKER_BUILD === "1" ? "standalone" : undefined,
   async rewrites() {
-    const backendUrl = process.env.BACKEND_URL || "http://localhost:8081";
+    const backendUrl = process.env.BACKEND_URL || "http://localhost:8001";
     return [
       {
         source: "/api/:path*",

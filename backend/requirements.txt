@@ -13,3 +13,5 @@ browser-use>=0.3.0
 bcrypt>=4.2.0
 python-jose[cryptography]>=3.3.0
 email-validator>=2.0.0
+pymysql>=1.1.0
+cryptography>=43.0.0

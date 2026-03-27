@@ -1,6 +1,10 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy.types import Text as _Text
+
+Text = LONGTEXT().with_variant(_Text(), "sqlite")
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
