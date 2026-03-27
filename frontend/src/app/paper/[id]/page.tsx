@@ -47,22 +47,16 @@ export default function PaperPage({
       } else if (e.key === "h" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         toggleHighlights();
-      } else if (e.key === "1" && e.altKey) {
+      } else if (e.altKey && e.key >= "1" && e.key <= "7") {
         e.preventDefault();
-        setActiveTab("summary");
-        setSidebarOpen(true);
-      } else if (e.key === "2" && e.altKey) {
-        e.preventDefault();
-        setActiveTab("translate");
-        setSidebarOpen(true);
-      } else if (e.key === "3" && e.altKey) {
-        e.preventDefault();
-        setActiveTab("chat");
-        setSidebarOpen(true);
-      } else if (e.key === "4" && e.altKey) {
-        e.preventDefault();
-        setActiveTab("notes");
-        setSidebarOpen(true);
+        const tabs: import("@/stores/paperStore").SidebarTab[] = [
+          "stem", "data", "formula", "figures", "translate", "chat", "notes",
+        ];
+        const idx = parseInt(e.key) - 1;
+        if (tabs[idx]) {
+          setActiveTab(tabs[idx]);
+          setSidebarOpen(true);
+        }
       }
     },
     []

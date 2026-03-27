@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { HighlightItem, ChatMessage, CitationItem, ChatMode, UserHighlightItem } from "@/lib/api";
 
-export type SidebarTab = "summary" | "translate" | "chat" | "notes";
+export type SidebarTab = "summary" | "stem" | "data" | "formula" | "figures" | "translate" | "chat" | "notes";
 
 export interface TextSelection {
   text: string;

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getToken } from "./auth";
+import { getToken, logout } from "./auth";
 
 const api = axios.create({
   baseURL: "/api",
@@ -14,15 +14,23 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Redirect to /login on 401/403
+// On 401/403 for logged-in users: clear token and redirect to login
+// For guests: silently reject (no redirect — guests don't need login)
+let redirectingToLogin = false;
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    const status = error.response?.status;
     if (
-      error.response?.status === 401 ||
-      error.response?.status === 403
+      (status === 401 || status === 403) &&
+      typeof window !== "undefined" &&
+      !redirectingToLogin &&
+      getToken() // only redirect if user had a token (not guest)
     ) {
-      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      redirectingToLogin = true;
+      logout();
+      if (!window.location.pathname.startsWith("/login")) {
         window.location.href = "/login";
       }
     }
@@ -394,6 +402,80 @@ export async function getFormulaLatex(
     { page, bbox }
   );
   return data;
+}
+
+// ── STEM Analysis API ────────────────────────────────────────────────────────
+
+export async function streamStemAnalysis(
+  paperId: number,
+  onChunk: (text: string) => void,
+  onDone: () => void,
+  onError: (msg: string) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const response = await fetch(`/api/ai/stem-analysis/${paperId}`, {
+    method: "POST",
+    headers: authHeaders(),
+    signal,
+  });
+  if (!response.ok || !response.body) {
+    onError(response.status === 429 ? "게스트는 하루 1회 AI 분석만 가능합니다." : "8단계 분석 요청에 실패했습니다.");
+    return;
+  }
+  await readSSE(response, onChunk, onDone, onError, signal);
+}
+
+export interface DataTable {
+  title: string;
+  type: "input" | "output" | "comparison";
+  headers: string[];
+  rows: string[][];
+  source: string;
+}
+
+export async function getNumericalTables(paperId: number): Promise<{ tables: DataTable[]; summary?: string }> {
+  const { data } = await api.post<{ tables: DataTable[]; summary?: string }>(`/ai/numerical-tables/${paperId}`);
+  return data;
+}
+
+export interface FormulaVariable {
+  symbol: string;
+  name: string;
+  unit: string;
+  dimension: string;
+}
+
+export interface FormulaAnalysisItem {
+  id: string;
+  latex: string;
+  description: string;
+  variables: FormulaVariable[];
+  dimensions: { lhs: string; rhs: string; consistent: boolean };
+  constraints?: string;
+  source?: string;
+}
+
+export async function getFormulaAnalysis(paperId: number): Promise<FormulaAnalysisItem[]> {
+  const { data } = await api.post<{ formulas: FormulaAnalysisItem[] }>(`/ai/formula-analysis/${paperId}`);
+  return data.formulas;
+}
+
+export interface FigureAnalysisItem {
+  id: string;
+  caption?: string;
+  figure_type: string;
+  axes: { x: string; y: string };
+  data_summary?: string;
+  key_findings: string[];
+  trends?: string;
+  related_values: { parameter: string; value: string; unit: string }[];
+  significance?: string;
+  page_ref?: string;
+}
+
+export async function getFigureAnalysis(paperId: number): Promise<FigureAnalysisItem[]> {
+  const { data } = await api.post<{ figures: FigureAnalysisItem[] }>(`/ai/figure-analysis/${paperId}`);
+  return data.figures;
 }
 
 // ── Tags API ────────────────────────────────────────────────────────────────
