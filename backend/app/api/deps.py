@@ -50,7 +50,11 @@ def get_accessible_paper_with_text(
 
 
 def check_guest_ai_limit(user: User | None, request: Request) -> None:
-    """Raise 429 if guest has already used AI today."""
+    """Raise 429 if guest has already used AI today (when limit is enabled)."""
+    from app.config import settings
+
+    if not settings.guest_ai_limit:
+        return
     if user is not None:
         return
     last_used = request.cookies.get(GUEST_AI_COOKIE)

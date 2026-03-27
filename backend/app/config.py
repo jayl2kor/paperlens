@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     claude_model: str = "claude-sonnet-4-20250514"
     jwt_secret: str = ""
     jwt_expire_days: int = 7
+    guest_ai_limit: bool = False  # True: 게스트 하루 1회 제한, False: 무제한
 
     model_config = {
         "env_file": str(Path(__file__).parent.parent / ".env"),
