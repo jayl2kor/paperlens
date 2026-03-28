@@ -1,38 +1,30 @@
 name: paperlens
 
 services:
-  mysql:
-    image: mysql:8.0
+  caddy:
+    image: caddy:2
     ports:
-      - "3306:3306"
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
     volumes:
-      - paperlens_mysql:/var/lib/mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-paperlens}
-      MYSQL_DATABASE: paperlens
-      MYSQL_USER: paperlens
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-paperlens}
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
     restart: unless-stopped
 
   backend:
     build: ./backend
-    ports:
-      - "8001:8001"
+    expose:
+      - "8001"
     volumes:
       - paperlens_uploads:/app/uploads
     environment:
-      - DATABASE_URL=mysql+pymysql://paperlens:${MYSQL_PASSWORD:-paperlens}@mysql:3306/paperlens?charset=utf8mb4
+      - DATABASE_URL=${DATABASE_URL:?DATABASE_URL must be set}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
-    depends_on:
-      mysql:
-        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -40,8 +32,8 @@ services:
       context: ./frontend
       args:
         - BACKEND_URL=http://backend:8001
-    ports:
-      - "3001:3000"
+    expose:
+      - "3000"
     environment:
       - HOSTNAME=0.0.0.0
     depends_on:
@@ -49,5 +41,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  paperlens_mysql:
   paperlens_uploads:
+  caddy_data:
+  caddy_config:
